@@ -1,21 +1,19 @@
-import numpy
-import random
+from __future__ import division
+from collections import defaultdict
+import numpy, random, copy
 
 
 # Checking rows and columns of a given grid.
 def valid_rows_columns(grid):
-    # Create a list to compare each row column with.
-    list_of_numbers = set(range(0, 10))
-
     # Testing the rows of the grid.
     for i in range(9):
-        row = list(grid[i, :])
-        if any(row.count(x) > 1 for x in range(1, 10)) or not set(row).issubset(list_of_numbers):
-            return False
+        row = [x for x in grid[i] if x != 0]
+        if len(set(row)) != len(row):
+            return False 
     # Testing the columns of the grid.
     for j in range(9):
-        column = list(grid[:, j].T)
-        if any(column.count(x) > 1 for x in range(1, 10)) or not set(column).issubset(list_of_numbers):
+        column = [grid[i][j] for i in range(9) if grid[i][j] != 0]
+        if len(set(column)) != len(column):
             return False
     return True
 
@@ -38,14 +36,13 @@ def square_groupings():
 # Checking if the 3x3 squares of a given grid is valid.
 def valid_squares(grid):
 
-    list_of_numbers = set(range(0, 10))
     # List containing 9 squares each is a also a list of size 9 with coordinate entries.
 
     squares = square_groupings()
 
     for i in range(9):
-        y = list([grid[x[0], x[1]] for x in squares[i]])
-        if any(y.count(x) > 1 for x in y) or not set(y).issubset(list_of_numbers):
+        y = [grid[x[0]][x[1]] for x in squares[i] if grid[x[0]][x[1]] != 0]
+        if len(set(y)) != len(y):
             return False
 
     return True
@@ -127,18 +124,37 @@ def valid_entry(grid,i,j):
         if grid[k][j] == grid[i][j]:
             count_column += 1
 
-    if list(grid[i]).count(grid[i][j]) > 1 or count_column > 1:
+    if grid[i].count(grid[i][j]) > 1 or count_column > 1:
         return False
     else:
     	return True
 
 def possible_values(grid,i,j):
     values = []
-    for l in range(9):
-        grid_copy = list(grid)
-        grid_copy[i][j] = l+1
-        if valid_entry(grid_copy,i,j):
-            values.append(l+1)
+    # find i0, the y coordinate of the top left of the square the referenced value lies in
+    if i % 3 == 0:
+        i0 = i
+    elif i % 3 == 1:
+        i0 = i - 1
+    else:
+        i0 = i - 2
+    # find j0, the x coordinate of the top left of the square the referenced value lies in
+    if j % 3 == 0:
+        j0 = j
+    elif j % 3 == 1:
+        j0 = j - 1
+    else:
+        j0 = j - 2
+
+    # existing values in that square
+    values_in_square = [grid[i0 + k][j0 + l] for k in range (3) for l in range(3) if grid[i0 + k][j0 + l] != 0]
+
+    
+    # get all the non-zero values in the row/column.
+    filled_already = set([grid[i][n] for n in range(9) if grid[i][n] != 0] + 
+                         [grid[m][j] for m in range(9) if grid[m][j] != 0])
+    values = [i+1 for i in range(9) if i+1 not in filled_already and (i+1) != grid[i][j] and (i + 1) not in values_in_square]
+
     return values
 
 # Takes an incomplete sudoku grid and attempts to solve it via the method of simulated annealing.
@@ -214,49 +230,69 @@ sudoku = [[2, 7, 0, 0, 0, 1, 0, 0, 0],
           [7, 0, 8, 0, 0, 6, 0, 0, 0], 
           [0, 5, 0, 0, 0, 7, 0, 3, 0]]
 
-test_grid = numpy.array([[1,2,3,4,5,6,7,8,9],[1,2,3,4,5,6,7,8,9],[1,2,3,4,5,6,7,8,9],[1,2,3,4,5,6,7,8,9],
-                         [1,2,3,4,5,6,7,8,9],[1,2,3,4,5,6,7,8,9],[1,2,3,4,5,6,7,8,9],[1,2,3,4,5,6,7,8,9],
-                         [1,2,3,4,5,6,7,8,9]])
+medium_sudoku = [[6,0,0,0,0,0,0,1,5],
+                 [0,0,5,7,0,0,0,3,0],
+                 [0,2,0,0,0,8,7,0,0],
+                 [2,0,0,0,4,0,6,5,0],
+                 [0,0,6,9,8,0,0,0,4],
+                 [0,0,0,0,0,6,0,8,0],
+                 [0,0,3,0,0,1,0,0,9],
+                 [0,6,2,0,0,0,0,0,0],
+                 [0,0,0,8,2,9,0,0,0]]
 
-# Backtracking algorithm for solving a Sudoku.
-def backtracking(grid):
-    grid_copy = list(grid)
-    empty_indices = []
-    pv = []
-    for i in range(len(grid)):
-        for j in range(len(grid)):
-            if grid[i][j] == 0:
-                empty_indices.append([i,j])
-                pv.append(possible_values(grid,i,j))
-                
-    original_copy_pv = list(pv) 
+hard_sudoku = [[8, 0, 5, 0, 0, 1, 0, 3, 0], 
+               [0, 3, 0, 9, 0, 0, 0, 0, 0],
+               [4, 0, 6, 0, 3, 0, 0, 0, 0],
+               [6, 0, 0, 0, 1, 0, 9, 0, 0],
+               [0, 5, 0, 3, 0, 8, 0, 7, 0], 
+               [0, 0, 9, 0, 4, 0, 0, 0, 1], 
+               [0, 0, 0, 0, 2, 0, 3, 0, 8],
+               [0, 0, 0, 0, 0, 9, 0, 2, 0], 
+               [0, 7, 0, 0, 0, 0, 5, 0, 4]]
 
-    print pv
+def backtrack(grid):
+    """solves sudoku via backtracing"""
 
+    # create copy of grid, get all empty indices, get all their possible values
+    grid_copy = copy.copy(grid)
+    empty_indices = [[i, j] for i in range(9) for j in range(9) if grid[i][j] == 0]
+    possibles = [possible_values(grid, x[0], x[1]) for x in empty_indices]
+
+    # index for empty_indices
     current_index = 0
-    while count_zeroes >= 1:
-        values = pv[current_index]
-        while values != []:
-            i = empty_indices[current_index][0]
-            j = empty_indices[current_index][1]
-            grid[i][j] = values.pop([0])
-            
-            if valid_entry(grid,i,j):
-                current_index += 1
-                print_grid(grid)
-                continue
-            else:
-                grid[i,j] = 0
+    values = possibles[current_index]
+
+    # while grid is still incomplete
+    while count_zeroes(grid_copy) > 0:
+        x = empty_indices[current_index][0]
+        y = empty_indices[current_index][1]
+        # we have ran out of values, so need to backtrack
         if values == []:
-            pv[current_index] = list(original_copy_pv[current_index])
+            grid_copy[x][y] = 0
             current_index -= 1
-            i_1 = empty_indices[current_index][0]
-            j_1 = empty_indices[current_index][1]
+            x = empty_indices[current_index][0]
+            y = empty_indices[current_index][1]
+            # set the previous value back to zero, and remove the value 
+            grid[x][y] = 0
+            values = possibles[current_index]
 
-            grid[i_1][j_1] = 0
+            continue
 
-    print_grid(grid)
-    return grid
+        # try a value
+        grid_copy[x][y] = values.pop(0)
 
-backtracking(sudoku)
-# simulated_annealing(sudoku)
+        # if its complete return the grid, if its valid move to next iteration
+        # otherwise, set the value back to zero and try another value
+        if valid_grid(grid_copy) and count_zeroes(grid_copy) == 0:
+            return grid_copy
+        elif valid_grid(grid_copy):
+            current_index += 1
+            x, y = empty_indices[current_index]
+            possibles[current_index] = possible_values(grid_copy, x, y)
+            values = possibles[current_index]
+        else:
+            grid_copy[x][y] = 0
+
+#print_grid(backtrack(sudoku))
+print_grid(backtrack(medium_sudoku))
+# print_grid(backtrack(hard_sudoku))
